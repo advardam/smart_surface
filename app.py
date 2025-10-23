@@ -8,6 +8,7 @@ import time
 import signal
 import sys
 import atexit
+import RPi.GPIO as GPIO
 
 app = Flask(__name__)
 
@@ -20,6 +21,9 @@ font = None
 def init_hardware():
     """Safely initialize GPIO and OLED display."""
     global sensor, oled, font
+
+    # Cleanup GPIO before initializing
+    GPIO.cleanup()
 
     try:
         if sensor is None:
@@ -38,7 +42,7 @@ def init_hardware():
         print(f"⚠️ Warning: OLED init failed — {e}")
 
 
-# Initialize once at startup
+# Initialize at startup
 init_hardware()
 
 
@@ -64,7 +68,6 @@ def get_distance():
     global sensor
     if sensor is None:
         init_hardware()
-
     try:
         distance_cm = round(sensor.distance * 100, 2)
         print(f"Measured Distance: {distance_cm} cm")
@@ -115,6 +118,7 @@ def cleanup_hardware(*args):
             sensor.close()
     except Exception as e:
         print(f"Cleanup error: {e}")
+    GPIO.cleanup()
     sys.exit(0)
 
 
@@ -145,6 +149,7 @@ def check_shape():
 # --- Run Flask safely ---
 if __name__ == "__main__":
     try:
-        app.run(host="0.0.0.0", port=5000, debug=True)
+        # Disable Flask auto-reloader to prevent GPIO busy errors
+        app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
     except KeyboardInterrupt:
         cleanup_hardware()
