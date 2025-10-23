@@ -1,39 +1,81 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Smart Surface Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/static/script.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; background: #101820; color: #FEE715; }
-        h1 { color: #FEE715; margin-top: 20px; }
-        .card { background: #1E1E1E; padding: 20px; margin: 10px auto; width: 80%; border-radius: 12px; box-shadow: 0 0 10px #333; }
-        button { background: #FEE715; color: #101820; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-top: 10px; }
-        button:hover { background: #FFD700; }
-        canvas { margin-top: 20px; background: #222; border-radius: 8px; }
-    </style>
+  <title>Smart Surface Dashboard</title>
+  <style>
+    body {
+      background-color: #0e0e0e;
+      color: #ffffff;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .dashboard {
+      display: flex;
+      align-items: center;
+      gap: 30px;
+      background-color: #1a1a1a;
+      padding: 20px 40px;
+      border-radius: 20px;
+      box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+    }
+    .display {
+      text-align: center;
+    }
+    .distance-value {
+      font-size: 48px;
+      color: #00ffff;
+      margin: 10px 0;
+    }
+    .shape-value {
+      font-size: 24px;
+      color: #ffcc00;
+    }
+    button {
+      background-color: #00bcd4;
+      border: none;
+      color: white;
+      padding: 15px 25px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 18px;
+      transition: 0.3s;
+    }
+    button:hover {
+      background-color: #008c9e;
+    }
+  </style>
 </head>
 <body>
-    <h1>Smart Surface Dashboard</h1>
-
-    <div class="card">
-        <h3>Sensor Data</h3>
-        <p>Distance: <span id="distance">--</span> cm</p>
-        <p>Color: <span id="color">--</span></p>
-        <p>Light Level: <span id="lux">--</span> lux (<span id="brightness">--</span>)</p>
-        <p>Object Temp: <span id="obj_temp">--</span> °C | Ambient Temp: <span id="amb_temp">--</span> °C</p>
+  <div class="dashboard">
+    <div class="display">
+      <h2>Distance</h2>
+      <div id="distance" class="distance-value">-- cm</div>
+      <h3>Shape</h3>
+      <div id="shape" class="shape-value">--</div>
     </div>
-
-    <div class="card">
-        <h3>Distance Graph</h3>
-        <canvas id="distanceChart" width="400" height="200"></canvas>
+    <div class="controls">
+      <button onclick="measureDistance()">Measure Distance</button>
+      <button onclick="checkShape()">Check Shape</button>
     </div>
+  </div>
 
-    <div class="card">
-        <h3>Shape Detection</h3>
-        <button onclick="detectShape()">Check Shape</button>
-        <p id="shapeResult">Shape: --</p>
-    </div>
+  <script>
+    async function measureDistance() {
+      const res = await fetch("/measure");
+      const data = await res.json();
+      document.getElementById("distance").innerText = data.distance + " cm";
+      document.getElementById("shape").innerText = "--";
+    }
+
+    async function checkShape() {
+      const res = await fetch("/check_shape");
+      const data = await res.json();
+      document.getElementById("distance").innerText = data.average + " cm";
+      document.getElementById("shape").innerText = data.shape;
+    }
+  </script>
 </body>
 </html>
