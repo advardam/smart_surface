@@ -1,155 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Smart Surface & Shape Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- Chart.js for gauges -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <style>
-        body {
-            background: #0d1117;
-            color: #f0f6fc;
-            font-family: "Segoe UI", sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: start;
-            height: 100vh;
-            padding: 20px;
-        }
-        h1 {
-            margin-bottom: 10px;
-            color: #58a6ff;
-        }
-        .dashboard {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            width: 100%;
-            max-width: 900px;
-            margin-top: 20px;
-        }
-        .card {
-            background: #161b22;
-            padding: 20px;
-            border-radius: 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            text-align: center;
-        }
-        canvas {
-            width: 100% !important;
-            height: 220px !important;
-        }
-        .color-box {
-            width: 100%;
-            height: 100px;
-            border-radius: 12px;
-            margin-top: 10px;
-        }
-        .reading {
-            font-size: 1.3em;
-            margin-top: 8px;
-        }
-        footer {
-            margin-top: 25px;
-            font-size: 0.9em;
-            color: #8b949e;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Smart Surface Interactive Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    body {
+        background-color: #0d1117;
+        color: #f0f6fc;
+        font-family: "Segoe UI", sans-serif;
+        text-align: center;
+        padding: 20px;
+    }
+    h1 { color: #58a6ff; }
+    button {
+        background-color: #238636;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 16px;
+        margin: 10px;
+        cursor: pointer;
+    }
+    button:hover { background-color: #2ea043; }
+    .card {
+        background: #161b22;
+        padding: 15px;
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        margin: 15px auto;
+        width: 90%;
+        max-width: 700px;
+    }
+    canvas { background: #0d1117; border-radius: 12px; margin-top: 10px; }
+    .color-box {
+        width: 100px; height: 100px;
+        border-radius: 12px;
+        margin: 10px auto;
+        border: 2px solid #58a6ff;
+    }
+</style>
 </head>
 <body>
-    <h1>🧠 Smart Surface & Shape Dashboard</h1>
-    <div class="dashboard">
-        <div class="card">
-            <h2>📏 Distance</h2>
-            <canvas id="distanceGauge"></canvas>
-            <div class="reading" id="distanceText">-- cm</div>
-        </div>
 
-        <div class="card">
-            <h2>🌡️ Temperature</h2>
-            <canvas id="tempGauge"></canvas>
-            <div class="reading" id="tempText">-- °C</div>
-        </div>
+<h1>🧠 Smart Surface & Shape Analyzer</h1>
 
-        <div class="card">
-            <h2>🎨 Color</h2>
-            <div id="colorBox" class="color-box"></div>
-            <div class="reading" id="luxText">Lux: --</div>
-        </div>
-    </div>
+<div class="card">
+    <h2>🎨 Color Detection</h2>
+    <div id="colorBox" class="color-box"></div>
+    <p id="luxText">Lux: --</p>
+</div>
 
-    <footer>Smart Surface Project • Raspberry Pi 5 • Flask Dashboard</footer>
+<div class="card">
+    <h2>📏 Distance Readings</h2>
+    <button onclick="recordData()">Start Recording</button>
+    <canvas id="distanceChart"></canvas>
+</div>
 
-    <script>
-        // Gauges setup
-        const distanceCtx = document.getElementById('distanceGauge');
-        const tempCtx = document.getElementById('tempGauge');
+<div class="card">
+    <h2>🧮 Shape Detection</h2>
+    <button onclick="checkShape()">Check Shape</button>
+    <p id="shapeResult">Shape: --</p>
+</div>
 
-        const distanceChart = new Chart(distanceCtx, {
-            type: 'doughnut',
-            data: {
-                datasets: [{
-                    data: [0, 100],
-                    backgroundColor: ['#58a6ff', '#21262d'],
-                    cutout: '80%',
-                }]
-            },
-            options: {
-                plugins: { legend: { display: false } },
-                rotation: -90,
-                circumference: 180,
-            }
-        });
-
-        const tempChart = new Chart(tempCtx, {
-            type: 'doughnut',
-            data: {
-                datasets: [{
-                    data: [0, 100],
-                    backgroundColor: ['#ff7b72', '#21262d'],
-                    cutout: '80%',
-                }]
-            },
-            options: {
-                plugins: { legend: { display: false } },
-                rotation: -90,
-                circumference: 180,
-            }
-        });
-
-        async function updateData() {
-            try {
-                const res = await fetch('/data');
-                const data = await res.json();
-
-                // Update distance
-                const dist = data.distance.toFixed(2);
-                distanceChart.data.datasets[0].data = [dist, 100 - dist];
-                distanceChart.update();
-                document.getElementById('distanceText').textContent = dist + " cm";
-
-                // Update temperature
-                const temp = data.obj_temp.toFixed(2);
-                tempChart.data.datasets[0].data = [temp, 100 - temp];
-                tempChart.update();
-                document.getElementById('tempText').textContent = temp + " °C";
-
-                // Update color and lux
-                const colorBox = document.getElementById('colorBox');
-                colorBox.style.backgroundColor = `rgb(${data.r}, ${data.g}, ${data.b})`;
-                document.getElementById('luxText').textContent = "Lux: " + data.lux.toFixed(2);
-
-            } catch (err) {
-                console.error("Data update failed:", err);
-            }
+<script>
+let ctx = document.getElementById('distanceChart').getContext('2d');
+let distanceChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Distance (cm)',
+            data: [],
+            backgroundColor: '#58a6ff'
+        }]
+    },
+    options: {
+        scales: {
+            y: { beginAtZero: true, max: 50 }
         }
+    }
+});
 
-        setInterval(updateData, 2000);
-        updateData();
-    </script>
+async function recordData() {
+    const res = await fetch('/record');
+    const data = await res.json();
+    updateChart(data.log);
+    updateColor();
+}
+
+async function updateColor() {
+    const res = await fetch('/data');
+    const data = await res.json();
+    const colorBox = document.getElementById('colorBox');
+    colorBox.style.backgroundColor = `rgb(${data.r}, ${data.g}, ${data.b})`;
+    document.getElementById('luxText').textContent = "Lux: " + data.lux.toFixed(2);
+}
+
+async function checkShape() {
+    const res = await fetch('/check_shape');
+    const data = await res.json();
+    document.getElementById('shapeResult').textContent =
+        `Shape: ${data.shape} | Avg: ${data.average} cm | Var: ${data.variation} cm`;
+}
+
+function updateChart(log) {
+    distanceChart.data.labels = log.map((_, i) => i + 1);
+    distanceChart.data.datasets[0].data = log;
+    distanceChart.update();
+}
+</script>
+
 </body>
 </html>
