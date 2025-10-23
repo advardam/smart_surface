@@ -1,43 +1,49 @@
+import time
+import atexit
+import RPi.GPIO as GPIO
+from gpiozero import DistanceSensor, Button, Buzzer
+from adafruit_tcs34725 import TCS34725
+import board, busio, adafruit_mlx90614
 from flask import Flask, render_template, jsonify
-import time, random
-import board, busio, adafruit_tcs34725, adafruit_mlx90614, adafruit_ssd1306
-from gpiozero import DistanceSensor, Button, Buzzer, Device
-from gpiozero.pins.lgpio import LGPIOFactory
-from PIL import Image, ImageDraw, ImageFont
+import Adafruit_SSD1306
 
-# --- Use LGPIO for Raspberry Pi 5 ---
-Device.pin_factory = LGPIOFactory()
+# 🧹--- GPIO Cleanup Before Initialization ---
+GPIO.setwarnings(False)
+GPIO.cleanup()
 
-app = Flask(__name__)
+# 🧹--- Register Cleanup on Exit ---
+def safe_cleanup():
+    try:
+        GPIO.cleanup()
+        print("🧹 GPIO cleaned successfully on exit.")
+    except Exception as e:
+        print("⚠️ GPIO cleanup error:", e)
+atexit.register(safe_cleanup)
 
-# === GPIO & SENSOR SETUP ===
-sensor = DistanceSensor(echo=24, trigger=23, max_distance=2)
-buzzer = Buzzer(18)
-button = Button(17)
-
-# === I2C & SENSORS ===
+# --- Setup I2C and Sensors ---
 i2c = busio.I2C(board.SCL, board.SDA)
-color_sensor = adafruit_tcs34725.TCS34725(i2c)
+
+# Color Sensor
+color_sensor = TCS34725(i2c)
+
+# Temperature Sensor (MLX90614)
 mlx = adafruit_mlx90614.MLX90614(i2c)
 
-# === OLED DISPLAY ===
-oled = adafruit_ssd1306.SSD1306_I2C(128, 64, i2c)
-oled.fill(0)
-oled.show()
-font = ImageFont.load_default()
+# OLED Display
+disp = Adafruit_SSD1306.SSD1306_128_64(rst=None)
+disp.begin()
+disp.clear()
+disp.display()
 
-# === OLED UPDATE FUNCTION ===
-def update_oled(distance, color_name, shape, amb_temp, obj_temp):
-    image = Image.new("1", (oled.width, oled.height))
-    draw = ImageDraw.Draw(image)
-    draw.text((0, 0), f"Dist: {distance:.1f} cm", font=font, fill=255)
-    draw.text((0, 15), f"Color: {color_name}", font=font, fill=255)
-    draw.text((0, 30), f"Shape: {shape}", font=font, fill=255)
-    draw.text((0, 45), f"Amb: {amb_temp:.1f}C Obj: {obj_temp:.1f}C", font=font, fill=255)
-    oled.image(image)
-    oled.show()
+# Ultrasonic Sensor + Button + Buzzer
+sensor = DistanceSensor(echo=24, trigger=23, max_distance=2)
+button = Button(17)
+buzzer = Buzzer(27)
 
-# === LOGIC HELPERS ===
+# Flask App
+app = Flask(__name__)
+
+# --- Helper Functions ---
 def get_color_name(r, g, b):
     colors = {
         "Red": (255, 0, 0),
@@ -47,71 +53,57 @@ def get_color_name(r, g, b):
         "Cyan": (0, 255, 255),
         "Magenta": (255, 0, 255),
         "White": (255, 255, 255),
-        "Black": (0, 0, 0)
+        "Black": (0, 0, 0),
     }
-    min_dist = 9999
-    best_match = "Unknown"
-    for name, (cr, cg, cb) in colors.items():
-        dist = ((r - cr)**2 + (g - cg)**2 + (b - cb)**2)**0.5
-        if dist < min_dist:
-            min_dist = dist
-            best_match = name
-    return best_match
+    closest_color = min(colors.keys(), key=lambda c: (r - colors[c][0])**2 + (g - colors[c][1])**2 + (b - colors[c][2])**2)
+    return closest_color
 
-def detect_shape(distance):
-    if distance < 10:
-        return "Circle"
-    elif distance < 20:
-        return "Square"
-    elif distance < 30:
-        return "Triangle"
-    else:
-        return "Unknown"
+def read_all_sensors():
+    # Distance
+    distance = round(sensor.distance * 100, 2)
+    
+    # Color
+    r, g, b, c = color_sensor.color_rgb_bytes
+    color_name = get_color_name(r, g, b)
+    
+    # Temperature
+    ambient_temp = round(mlx.ambient_temperature, 2)
+    object_temp = round(mlx.object_temperature, 2)
 
-# === ROUTES ===
-@app.route("/")
+    # Show on OLED
+    disp.clear()
+    disp.display()
+    from PIL import Image, ImageDraw, ImageFont
+    image = Image.new('1', (disp.width, disp.height))
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+    
+    draw.text((0, 0), f"Dist: {distance} cm", font=font, fill=255)
+    draw.text((0, 16), f"Color: {color_name}", font=font, fill=255)
+    draw.text((0, 32), f"Amb: {ambient_temp}°C", font=font, fill=255)
+    draw.text((0, 48), f"Obj: {object_temp}°C", font=font, fill=255)
+    disp.image(image)
+    disp.display()
+
+    return {
+        "distance": distance,
+        "color": color_name,
+        "ambient_temp": ambient_temp,
+        "object_temp": object_temp
+    }
+
+@app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('index.html')
 
-@app.route("/measure")
-def measure():
+@app.route('/check', methods=['GET'])
+def check_readings():
     buzzer.on()
     time.sleep(0.2)
     buzzer.off()
-
-    distance = round(sensor.distance * 100, 2)
-    r, g, b, c = color_sensor.color_raw
-    color_name = get_color_name(r, g, b)
-    shape = detect_shape(distance)
-
-    amb_temp = mlx.ambient_temperature + random.uniform(-0.5, 0.5)
-    obj_temp = mlx.object_temperature + random.uniform(-0.3, 0.3)
-
-    update_oled(distance, color_name, shape, amb_temp, obj_temp)
-
-    return jsonify({
-        "distance": distance,
-        "color": color_name,
-        "shape": shape,
-        "ambient": round(amb_temp, 2),
-        "object": round(obj_temp, 2)
-    })
-
-@app.route("/cleanup")
-def cleanup():
-    sensor.close()
-    buzzer.close()
-    button.close()
-    oled.fill(0)
-    oled.show()
-    return "GPIO cleaned up successfully"
+    data = read_all_sensors()
+    return jsonify(data)
 
 if __name__ == "__main__":
-    try:
-        app.run(host="0.0.0.0", port=5000, debug=True)
-    finally:
-        sensor.close()
-        buzzer.close()
-        button.close()
-        oled.fill(0)
-        oled.show()
+    print("🚀 Smart Surface Flask server running...")
+    app.run(host='0.0.0.0', port=5000, debug=True)
