@@ -1,81 +1,42 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <title>Smart Surface Dashboard</title>
-  <style>
-    body {
-      background-color: #0e0e0e;
-      color: #ffffff;
-      font-family: Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    .dashboard {
-      display: flex;
-      align-items: center;
-      gap: 30px;
-      background-color: #1a1a1a;
-      padding: 20px 40px;
-      border-radius: 20px;
-      box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
-    }
-    .display {
-      text-align: center;
-    }
-    .distance-value {
-      font-size: 48px;
-      color: #00ffff;
-      margin: 10px 0;
-    }
-    .shape-value {
-      font-size: 24px;
-      color: #ffcc00;
-    }
-    button {
-      background-color: #00bcd4;
-      border: none;
-      color: white;
-      padding: 15px 25px;
-      border-radius: 10px;
-      cursor: pointer;
-      font-size: 18px;
-      transition: 0.3s;
-    }
-    button:hover {
-      background-color: #008c9e;
-    }
-  </style>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="dashboard">
-    <div class="display">
-      <h2>Distance</h2>
-      <div id="distance" class="distance-value">-- cm</div>
-      <h3>Shape</h3>
-      <div id="shape" class="shape-value">--</div>
+  <div class="container">
+    <h1>🟢 Smart Surface Dashboard</h1>
+
+    <div class="card">
+      <p><strong>Distance:</strong> <span id="distance">--</span> cm</p>
+      <p><strong>Color:</strong> <span id="color">--</span></p>
+      <p><strong>Shape:</strong> <span id="shape">--</span></p>
+      <p><strong>Ambient Temp:</strong> <span id="ambient">--</span> °C</p>
+      <p><strong>Object Temp:</strong> <span id="object">--</span> °C</p>
     </div>
-    <div class="controls">
-      <button onclick="measureDistance()">Measure Distance</button>
-      <button onclick="checkShape()">Check Shape</button>
-    </div>
+
+    <button id="checkBtn">Check Shape</button>
   </div>
 
   <script>
-    async function measureDistance() {
+    document.getElementById("checkBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("checkBtn");
+      btn.disabled = true;
+      btn.textContent = "Measuring...";
       const res = await fetch("/measure");
       const data = await res.json();
-      document.getElementById("distance").innerText = data.distance + " cm";
-      document.getElementById("shape").innerText = "--";
-    }
 
-    async function checkShape() {
-      const res = await fetch("/check_shape");
-      const data = await res.json();
-      document.getElementById("distance").innerText = data.average + " cm";
-      document.getElementById("shape").innerText = data.shape;
-    }
+      document.getElementById("distance").textContent = data.distance;
+      document.getElementById("color").textContent = data.color;
+      document.getElementById("shape").textContent = data.shape;
+      document.getElementById("ambient").textContent = data.ambient;
+      document.getElementById("object").textContent = data.object;
+
+      btn.disabled = false;
+      btn.textContent = "Check Shape";
+    });
   </script>
 </body>
 </html>
