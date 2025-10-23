@@ -1,24 +1,19 @@
 from flask import Flask, render_template, jsonify
-import time, random, threading
-import board, busio, adafruit_tcs34725
-import Adafruit_SSD1306
-import RPi.GPIO as GPIO
+import time, random
+import board, busio, adafruit_tcs34725, adafruit_mlx90614, adafruit_ssd1306
+from gpiozero import DistanceSensor, Button, Buzzer, Device
+from gpiozero.pins.lgpio import LGPIOFactory
 from PIL import Image, ImageDraw, ImageFont
-import adafruit_mlx90614
+
+# --- Use LGPIO for Raspberry Pi 5 ---
+Device.pin_factory = LGPIOFactory()
 
 app = Flask(__name__)
 
-# === GPIO SETUP ===
-TRIG = 23
-ECHO = 24
-BUZZER = 18
-BUTTON = 17
-
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(TRIG, GPIO.OUT)
-GPIO.setup(ECHO, GPIO.IN)
-GPIO.setup(BUZZER, GPIO.OUT)
-GPIO.setup(BUTTON, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+# === GPIO & SENSOR SETUP ===
+sensor = DistanceSensor(echo=24, trigger=23, max_distance=2)
+buzzer = Buzzer(18)
+button = Button(17)
 
 # === I2C & SENSORS ===
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -26,13 +21,12 @@ color_sensor = adafruit_tcs34725.TCS34725(i2c)
 mlx = adafruit_mlx90614.MLX90614(i2c)
 
 # === OLED DISPLAY ===
-oled = Adafruit_SSD1306.SSD1306_128_64(rst=None)
-oled.begin()
-oled.clear()
-oled.display()
-
+oled = adafruit_ssd1306.SSD1306_I2C(128, 64, i2c)
+oled.fill(0)
+oled.show()
 font = ImageFont.load_default()
 
+# === OLED UPDATE FUNCTION ===
 def update_oled(distance, color_name, shape, amb_temp, obj_temp):
     image = Image.new("1", (oled.width, oled.height))
     draw = ImageDraw.Draw(image)
@@ -41,24 +35,9 @@ def update_oled(distance, color_name, shape, amb_temp, obj_temp):
     draw.text((0, 30), f"Shape: {shape}", font=font, fill=255)
     draw.text((0, 45), f"Amb: {amb_temp:.1f}C Obj: {obj_temp:.1f}C", font=font, fill=255)
     oled.image(image)
-    oled.display()
+    oled.show()
 
-def read_distance():
-    GPIO.output(TRIG, True)
-    time.sleep(0.00001)
-    GPIO.output(TRIG, False)
-    pulse_start = time.time()
-    timeout = pulse_start + 0.05
-    while GPIO.input(ECHO) == 0 and pulse_start < timeout:
-        pulse_start = time.time()
-    pulse_end = time.time()
-    timeout = pulse_end + 0.05
-    while GPIO.input(ECHO) == 1 and pulse_end < timeout:
-        pulse_end = time.time()
-    duration = pulse_end - pulse_start
-    distance = duration * 17150
-    return round(distance, 2)
-
+# === LOGIC HELPERS ===
 def get_color_name(r, g, b):
     colors = {
         "Red": (255, 0, 0),
@@ -73,7 +52,7 @@ def get_color_name(r, g, b):
     min_dist = 9999
     best_match = "Unknown"
     for name, (cr, cg, cb) in colors.items():
-        dist = ((r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2) ** 0.5
+        dist = ((r - cr)**2 + (g - cg)**2 + (b - cb)**2)**0.5
         if dist < min_dist:
             min_dist = dist
             best_match = name
@@ -89,31 +68,25 @@ def detect_shape(distance):
     else:
         return "Unknown"
 
+# === ROUTES ===
 @app.route("/")
 def index():
     return render_template("index.html")
 
 @app.route("/measure")
 def measure():
-    GPIO.output(BUZZER, True)
+    buzzer.on()
     time.sleep(0.2)
-    GPIO.output(BUZZER, False)
+    buzzer.off()
 
-    # === Distance ===
-    distance = read_distance()
-
-    # === Color ===
+    distance = round(sensor.distance * 100, 2)
     r, g, b, c = color_sensor.color_raw
     color_name = get_color_name(r, g, b)
-
-    # === Shape (dummy logic based on distance) ===
     shape = detect_shape(distance)
 
-    # === Temperature with variation ===
     amb_temp = mlx.ambient_temperature + random.uniform(-0.5, 0.5)
     obj_temp = mlx.object_temperature + random.uniform(-0.3, 0.3)
 
-    # === OLED Update ===
     update_oled(distance, color_name, shape, amb_temp, obj_temp)
 
     return jsonify({
@@ -126,11 +99,19 @@ def measure():
 
 @app.route("/cleanup")
 def cleanup():
-    GPIO.cleanup()
+    sensor.close()
+    buzzer.close()
+    button.close()
+    oled.fill(0)
+    oled.show()
     return "GPIO cleaned up successfully"
 
 if __name__ == "__main__":
     try:
         app.run(host="0.0.0.0", port=5000, debug=True)
     finally:
-        GPIO.cleanup()
+        sensor.close()
+        buzzer.close()
+        button.close()
+        oled.fill(0)
+        oled.show()
