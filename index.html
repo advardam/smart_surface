@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Surface & Shape Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Chart.js for gauges -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            background: #0d1117;
+            color: #f0f6fc;
+            font-family: "Segoe UI", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: start;
+            height: 100vh;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 10px;
+            color: #58a6ff;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 900px;
+            margin-top: 20px;
+        }
+        .card {
+            background: #161b22;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        canvas {
+            width: 100% !important;
+            height: 220px !important;
+        }
+        .color-box {
+            width: 100%;
+            height: 100px;
+            border-radius: 12px;
+            margin-top: 10px;
+        }
+        .reading {
+            font-size: 1.3em;
+            margin-top: 8px;
+        }
+        footer {
+            margin-top: 25px;
+            font-size: 0.9em;
+            color: #8b949e;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧠 Smart Surface & Shape Dashboard</h1>
+    <div class="dashboard">
+        <div class="card">
+            <h2>📏 Distance</h2>
+            <canvas id="distanceGauge"></canvas>
+            <div class="reading" id="distanceText">-- cm</div>
+        </div>
+
+        <div class="card">
+            <h2>🌡️ Temperature</h2>
+            <canvas id="tempGauge"></canvas>
+            <div class="reading" id="tempText">-- °C</div>
+        </div>
+
+        <div class="card">
+            <h2>🎨 Color</h2>
+            <div id="colorBox" class="color-box"></div>
+            <div class="reading" id="luxText">Lux: --</div>
+        </div>
+    </div>
+
+    <footer>Smart Surface Project • Raspberry Pi 5 • Flask Dashboard</footer>
+
+    <script>
+        // Gauges setup
+        const distanceCtx = document.getElementById('distanceGauge');
+        const tempCtx = document.getElementById('tempGauge');
+
+        const distanceChart = new Chart(distanceCtx, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [0, 100],
+                    backgroundColor: ['#58a6ff', '#21262d'],
+                    cutout: '80%',
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                rotation: -90,
+                circumference: 180,
+            }
+        });
+
+        const tempChart = new Chart(tempCtx, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [0, 100],
+                    backgroundColor: ['#ff7b72', '#21262d'],
+                    cutout: '80%',
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                rotation: -90,
+                circumference: 180,
+            }
+        });
+
+        async function updateData() {
+            try {
+                const res = await fetch('/data');
+                const data = await res.json();
+
+                // Update distance
+                const dist = data.distance.toFixed(2);
+                distanceChart.data.datasets[0].data = [dist, 100 - dist];
+                distanceChart.update();
+                document.getElementById('distanceText').textContent = dist + " cm";
+
+                // Update temperature
+                const temp = data.obj_temp.toFixed(2);
+                tempChart.data.datasets[0].data = [temp, 100 - temp];
+                tempChart.update();
+                document.getElementById('tempText').textContent = temp + " °C";
+
+                // Update color and lux
+                const colorBox = document.getElementById('colorBox');
+                colorBox.style.backgroundColor = `rgb(${data.r}, ${data.g}, ${data.b})`;
+                document.getElementById('luxText').textContent = "Lux: " + data.lux.toFixed(2);
+
+            } catch (err) {
+                console.error("Data update failed:", err);
+            }
+        }
+
+        setInterval(updateData, 2000);
+        updateData();
+    </script>
+</body>
+</html>
