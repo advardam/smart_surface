@@ -1,116 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Smart Surface Interactive Dashboard</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-    body {
-        background-color: #0d1117;
-        color: #f0f6fc;
-        font-family: "Segoe UI", sans-serif;
-        text-align: center;
-        padding: 20px;
-    }
-    h1 { color: #58a6ff; }
-    button {
-        background-color: #238636;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 10px 16px;
-        margin: 10px;
-        cursor: pointer;
-    }
-    button:hover { background-color: #2ea043; }
-    .card {
-        background: #161b22;
-        padding: 15px;
-        border-radius: 12px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        margin: 15px auto;
-        width: 90%;
-        max-width: 700px;
-    }
-    canvas { background: #0d1117; border-radius: 12px; margin-top: 10px; }
-    .color-box {
-        width: 100px; height: 100px;
-        border-radius: 12px;
-        margin: 10px auto;
-        border: 2px solid #58a6ff;
-    }
-</style>
+    <meta charset="UTF-8">
+    <title>Smart Surface Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/script.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #101820; color: #FEE715; }
+        h1 { color: #FEE715; margin-top: 20px; }
+        .card { background: #1E1E1E; padding: 20px; margin: 10px auto; width: 80%; border-radius: 12px; box-shadow: 0 0 10px #333; }
+        button { background: #FEE715; color: #101820; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #FFD700; }
+        canvas { margin-top: 20px; background: #222; border-radius: 8px; }
+    </style>
 </head>
 <body>
+    <h1>Smart Surface Dashboard</h1>
 
-<h1>🧠 Smart Surface & Shape Analyzer</h1>
+    <div class="card">
+        <h3>Sensor Data</h3>
+        <p>Distance: <span id="distance">--</span> cm</p>
+        <p>Color: <span id="color">--</span></p>
+        <p>Light Level: <span id="lux">--</span> lux (<span id="brightness">--</span>)</p>
+        <p>Object Temp: <span id="obj_temp">--</span> °C | Ambient Temp: <span id="amb_temp">--</span> °C</p>
+    </div>
 
-<div class="card">
-    <h2>🎨 Color Detection</h2>
-    <div id="colorBox" class="color-box"></div>
-    <p id="luxText">Lux: --</p>
-</div>
+    <div class="card">
+        <h3>Distance Graph</h3>
+        <canvas id="distanceChart" width="400" height="200"></canvas>
+    </div>
 
-<div class="card">
-    <h2>📏 Distance Readings</h2>
-    <button onclick="recordData()">Start Recording</button>
-    <canvas id="distanceChart"></canvas>
-</div>
-
-<div class="card">
-    <h2>🧮 Shape Detection</h2>
-    <button onclick="checkShape()">Check Shape</button>
-    <p id="shapeResult">Shape: --</p>
-</div>
-
-<script>
-let ctx = document.getElementById('distanceChart').getContext('2d');
-let distanceChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-        labels: [],
-        datasets: [{
-            label: 'Distance (cm)',
-            data: [],
-            backgroundColor: '#58a6ff'
-        }]
-    },
-    options: {
-        scales: {
-            y: { beginAtZero: true, max: 50 }
-        }
-    }
-});
-
-async function recordData() {
-    const res = await fetch('/record');
-    const data = await res.json();
-    updateChart(data.log);
-    updateColor();
-}
-
-async function updateColor() {
-    const res = await fetch('/data');
-    const data = await res.json();
-    const colorBox = document.getElementById('colorBox');
-    colorBox.style.backgroundColor = `rgb(${data.r}, ${data.g}, ${data.b})`;
-    document.getElementById('luxText').textContent = "Lux: " + data.lux.toFixed(2);
-}
-
-async function checkShape() {
-    const res = await fetch('/check_shape');
-    const data = await res.json();
-    document.getElementById('shapeResult').textContent =
-        `Shape: ${data.shape} | Avg: ${data.average} cm | Var: ${data.variation} cm`;
-}
-
-function updateChart(log) {
-    distanceChart.data.labels = log.map((_, i) => i + 1);
-    distanceChart.data.datasets[0].data = log;
-    distanceChart.update();
-}
-</script>
-
+    <div class="card">
+        <h3>Shape Detection</h3>
+        <button onclick="detectShape()">Check Shape</button>
+        <p id="shapeResult">Shape: --</p>
+    </div>
 </body>
 </html>
