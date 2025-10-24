@@ -1,136 +1,165 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Smart Surface & Shape Dashboard</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Surface and Shape Detector</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body{font-family:Arial,system-ui;background:#0b1220;color:#e6f1ff;margin:0}
-    header{padding:18px;text-align:center;background:#071024}
-    .row{display:flex;gap:18px;padding:18px;flex-wrap:wrap;justify-content:center}
-    .card{background:#0f1724;padding:14px;border-radius:10px;min-width:260px;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
-    .big{min-width:520px}
-    h1,h2{margin:6px 0;color:#8ad4ff}
-    .metric{font-size:28px;color:#cde9ff;margin:8px 0}
-    .btn{background:#1fb6ff;color:#012; border:none;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:700}
-    .btn:active{transform:translateY(1px)}
-    .color-box{width:80px;height:48px;border-radius:6px;border:2px solid #2b8abf;display:inline-block;vertical-align:middle}
-    footer{padding:12px;text-align:center;color:#97bcd9}
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #e32636, #008000);
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 2.2em;
+      font-weight: bold;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+    }
+    .buttons {
+      margin: 20px auto;
+    }
+    button {
+      background-color: yellow;
+      color: black;
+      font-size: 1.2em;
+      border: none;
+      border-radius: 12px;
+      padding: 15px 30px;
+      margin: 10px;
+      cursor: pointer;
+      font-weight: bold;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      transition: transform 0.2s ease, background-color 0.2s ease;
+    }
+    button:hover {
+      background-color: #fff34d;
+      transform: scale(1.05);
+    }
+    .data-box {
+      display: inline-block;
+      background: rgba(255,255,255,0.15);
+      border-radius: 10px;
+      padding: 15px;
+      margin: 10px;
+      width: 250px;
+      font-size: 1.1em;
+    }
+    .chart-container {
+      background: white;
+      color: black;
+      border-radius: 10px;
+      margin: 20px auto;
+      padding: 15px;
+      width: 80%;
+    }
+    canvas {
+      background: white;
+    }
   </style>
 </head>
 <body>
-<header><h1>Smart Surface & Shape Detection</h1></header>
+  <h1>Smart Surface and Shape Detector</h1>
 
-<div class="row">
-  <div class="card">
-    <h2>Current Readings</h2>
-    <div>Distance: <div id="distance_text" class="metric">--</div></div>
-    <div>Color: <div id="color_text" class="metric">--</div></div>
-    <div>Temperature: <div id="temp_text" class="metric">--</div></div>
-    <div>Speed of sound: <div id="sound_text" class="metric">--</div></div>
+  <div class="buttons">
+    <button onclick="startMeasurement('distance')">Measure Distance</button>
+    <button onclick="startMeasurement('shape')">Measure Shape</button>
+    <button onclick="startMeasurement('material')">Measure Material</button>
   </div>
 
-  <div class="card big">
-    <h2>Controls</h2>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn" onclick="measureDistance()">Measure Distance</button>
-      <button class="btn" onclick="measureShape()">Measure Shape (15)</button>
-      <button class="btn" onclick="measureMaterial()">Test Material (20)</button>
-    </div>
-    <div style="margin-top:14px">
-      <canvas id="chart" height="120"></canvas>
-    </div>
+  <div id="data-panels">
+    <div class="data-box">Distance: <span id="distance">--</span> cm</div>
+    <div class="data-box">Color: <span id="color">--</span></div>
+    <div class="data-box">Object Temp: <span id="obj_temp">--</span> °C</div>
+    <div class="data-box">Ambient Temp: <span id="amb_temp">--</span> °C</div>
+    <div class="data-box">Speed of Sound: <span id="speed">--</span> m/s</div>
+    <div class="data-box">Temp Variation: <span id="temp_var">--</span> °C</div>
   </div>
 
-  <div class="card">
-    <h2>Color & Light</h2>
-    <div><span id="color_box" class="color-box"></span>
-      <div style="display:inline-block;vertical-align:middle;margin-left:10px">
-        <div id="rgb_text">R: - G: - B: -</div>
-        <div id="lux_text">Lux: -</div>
-      </div>
-    </div>
+  <div class="data-box" style="width: 80%; font-size: 1.2em;">
+    Status: <span id="status">Waiting for measurement...</span>
   </div>
 
-  <div class="card">
-    <h2>Last Test Result</h2>
-    <div id="last_result" style="font-size:15px;color:#dff">No test yet</div>
+  <div class="chart-container">
+    <h3>Shape Readings</h3>
+    <canvas id="shapeChart"></canvas>
   </div>
-</div>
 
-<footer>Raspberry Pi 5 • Press a button to start each test • OLED + Buzzer will also update</footer>
+  <div class="chart-container">
+    <h3>Material Readings</h3>
+    <canvas id="materialChart"></canvas>
+  </div>
 
-<script>
-const chartCtx = document.getElementById('chart').getContext('2d');
-const chart = new Chart(chartCtx, {
-  type: 'line',
-  data: { labels: [], datasets: [{ label: 'Distance (cm)', data: [], borderColor: '#62dafb', tension:0.2 }] },
-  options: { scales:{ y:{ beginAtZero:false } }, responsive:true }
-});
+  <script>
+    const shapeChart = new Chart(document.getElementById("shapeChart"), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Shape Readings (cm)',
+          data: [],
+          borderColor: 'black',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          tension: 0.3
+        }]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: "Sample Number" }},
+          y: { title: { display: true, text: "Distance (cm)" }}
+        }
+      }
+    });
 
-async function fetchCurrent(){
-  const res = await fetch('/api/read_current');
-  const j = await res.json();
-  document.getElementById('distance_text').innerText = j.distance_text;
-  document.getElementById('color_text').innerText = j.color_text;
-  document.getElementById('temp_text').innerText = j.temp_text;
-  document.getElementById('sound_text').innerText = j.speed_of_sound_m_s ? j.speed_of_sound_m_s + ' m/s' : '--';
-  // color swatch
-  const r=j.r||0, g=j.g||0, b=j.b||0;
-  document.getElementById('color_box').style.backgroundColor = `rgb(${r},${g},${b})`;
-  document.getElementById('rgb_text').innerText = `R:${r} G:${g} B:${b}`;
-  document.getElementById('lux_text').innerText = `Lux: ${Math.round(j.lux||0)}`;
-}
+    const materialChart = new Chart(document.getElementById("materialChart"), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Material Readings (cm)',
+          data: [],
+          borderColor: 'black',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          tension: 0.3
+        }]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: "Sample Number" }},
+          y: { title: { display: true, text: "Distance (cm)" }}
+        }
+      }
+    });
 
-async function measureDistance(){
-  setLast("Measuring distance...");
-  const res = await fetch('/api/measure_distance');
-  const j = await res.json();
-  setLast("Distance result: " + j.distance_text);
-  // update chart with single value (append)
-  appendChartValue(j.distance_val);
-}
+    async function startMeasurement(type) {
+      document.getElementById("status").innerText = `Measuring ${type}... Please wait.`;
+      const response = await fetch(`/measure/${type}`);
+      const data = await response.json();
 
-async function measureShape(){
-  setLast("Measuring shape (15 readings)...");
-  const res = await fetch('/api/measure_shape');
-  const j = await res.json();
-  setLast(`Shape: ${j.shape} | avg ${j.average} cm | std ${j.std}`);
-  // display full 15 readings on chart (nulls shown as gaps)
-  setChartSeries(j.readings);
-  // also show on OLED and buzzer already done by backend
-}
+      document.getElementById("distance").innerText = data.distance || "--";
+      document.getElementById("color").innerText = data.color || "--";
+      document.getElementById("obj_temp").innerText = data.obj_temp || "--";
+      document.getElementById("amb_temp").innerText = data.amb_temp || "--";
+      document.getElementById("speed").innerText = data.speed || "--";
+      document.getElementById("temp_var").innerText = data.temp_variation || "--";
+      document.getElementById("status").innerText = data.status || "Completed";
 
-async function measureMaterial(){
-  setLast("Measuring material (20 readings)...");
-  const res = await fetch('/api/measure_material');
-  const j = await res.json();
-  setLast(`Material verdict: ${j.verdict} | avg ${j.average} std ${j.std}`);
-  setChartSeries(j.readings);
-}
-
-function setLast(txt){
-  document.getElementById('last_result').innerText = txt;
-}
-
-function appendChartValue(v){
-  if(v===null || v===undefined) return;
-  chart.data.labels.push('');
-  chart.data.datasets[0].data.push(v);
-  if(chart.data.labels.length>30){ chart.data.labels.shift(); chart.data.datasets[0].data.shift(); }
-  chart.update();
-}
-
-function setChartSeries(arr){
-  chart.data.labels = arr.map((_,i)=>i+1);
-  chart.data.datasets[0].data = arr.map(x=> x===null ? null : x);
-  chart.update();
-}
-
-// poll current every 2s for live numbers
-fetchCurrent();
-setInterval(fetchCurrent, 2000);
-</script>
+      if (type === "shape" && data.readings) {
+        shapeChart.data.labels = data.readings.map((_, i) => i + 1);
+        shapeChart.data.datasets[0].data = data.readings;
+        shapeChart.update();
+      } else if (type === "material" && data.readings) {
+        materialChart.data.labels = data.readings.map((_, i) => i + 1);
+        materialChart.data.datasets[0].data = data.readings;
+        materialChart.update();
+      }
+    }
+  </script>
 </body>
 </html>
