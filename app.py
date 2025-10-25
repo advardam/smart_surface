@@ -1,6 +1,6 @@
 from flask import Flask, render_template, jsonify
 import lgpio
-import time, statistics, random
+import time, statistics, random, sys
 from threading import Lock
 from luma.core.interface.serial import i2c
 from luma.oled.device import ssd1306
@@ -14,19 +14,54 @@ TRIG = 23
 ECHO = 24
 BUZZER = 18
 
-# Open GPIO chip
-h = lgpio.gpiochip_open(0)
+# --- Safe GPIO setup with self-recovery ---
+def open_gpiochip():
+    try:
+        return lgpio.gpiochip_open(0)
+    except Exception as e:
+        print("❌ Failed to open GPIO chip:", e)
+        sys.exit(1)
 
-# Configure GPIO
-lgpio.gpio_claim_output(h, TRIG)
-lgpio.gpio_claim_input(h, ECHO)
-lgpio.gpio_claim_output(h, BUZZER)
+def safe_claim_output(h, pin, level=0):
+    try:
+        lgpio.gpio_claim_output(h, pin, level)
+        print(f"✅ Output pin {pin} ready")
+    except lgpio.error as e:
+        if "busy" in str(e).lower():
+            print(f"⚠️ GPIO {pin} busy — releasing handles and retrying...")
+            try:
+                lgpio.gpiochip_close(h)
+                time.sleep(0.2)
+                new_h = open_gpiochip()
+                lgpio.gpio_claim_output(new_h, pin, level)
+                print(f"✅ GPIO {pin} reclaimed successfully")
+                return new_h
+            except Exception as e2:
+                print(f"❌ Could not reclaim GPIO {pin}: {e2}")
+        else:
+            print(f"⚠️ Could not claim GPIO {pin}: {e}")
+    return h
 
-# --- OLED setup using luma.oled ---
+def safe_claim_input(h, pin):
+    try:
+        lgpio.gpio_claim_input(h, pin)
+        print(f"✅ Input pin {pin} ready")
+    except lgpio.error as e:
+        if "busy" in str(e).lower():
+            print(f"⚠️ GPIO {pin} busy — ignoring for now.")
+        else:
+            print(f"⚠️ Could not claim GPIO {pin}: {e}")
+
+# Open and configure GPIO
+h = open_gpiochip()
+h = safe_claim_output(h, TRIG)
+safe_claim_input(h, ECHO)
+h = safe_claim_output(h, BUZZER)
+
+# --- OLED setup (luma.oled) ---
 serial = i2c(port=1, address=0x3C)
 disp = ssd1306(serial)
-width = disp.width
-height = disp.height
+width, height = disp.width, disp.height
 image = Image.new("1", (width, height))
 draw = ImageDraw.Draw(image)
 font = ImageFont.load_default()
@@ -37,7 +72,6 @@ def oled_display(line1, line2=""):
     draw.text((0, 30), line2, font=font, fill=255)
     disp.display(image)
 
-
 # --- Helper functions ---
 def measure_distance():
     """Reliable ultrasonic distance measurement."""
@@ -47,7 +81,6 @@ def measure_distance():
     time.sleep(0.00001)
     lgpio.gpio_write(h, TRIG, 0)
 
-    # Wait for echo start
     start_time = time.time()
     timeout = start_time + 0.04
     while lgpio.gpio_read(h, ECHO) == 0:
@@ -55,23 +88,22 @@ def measure_distance():
         if time.time() > timeout:
             return None
 
-    # Wait for echo end
     end_time = time.time()
     while lgpio.gpio_read(h, ECHO) == 1:
         end_time = time.time()
         if time.time() > timeout:
             return None
 
-    # Calculate distance in cm
     distance = (end_time - start_time) * 17150
     return round(distance, 2) if distance > 2 else None
 
-
 def beep():
-    lgpio.gpio_write(h, BUZZER, 1)
-    time.sleep(0.2)
-    lgpio.gpio_write(h, BUZZER, 0)
-
+    try:
+        lgpio.gpio_write(h, BUZZER, 1)
+        time.sleep(0.15)
+        lgpio.gpio_write(h, BUZZER, 0)
+    except Exception:
+        pass
 
 def evaluate_accuracy(distance, temp, std_dev):
     """Return badge type and recommendation."""
@@ -87,20 +119,16 @@ def evaluate_accuracy(distance, temp, std_dev):
         badge, color, comment = "Poor", "red", "High error — try stabilizing object or temperature."
     return badge, color, comment, round(speed_of_sound, 2)
 
-
-# --- Flask Routes ---
+# --- Flask routes ---
 @app.route("/")
 def index():
     return render_template("dashboard.html")
-
 
 @app.route("/measure_distance")
 def measure_distance_route():
     with lock:
         beep()
-        distance = measure_distance()
-        if distance is None:
-            distance = random.uniform(10, 100)
+        distance = measure_distance() or random.uniform(10, 100)
         temp = random.uniform(20, 35)
         oled_display(f"Dist: {distance} cm", f"Temp: {round(temp,1)}°C")
         badge, color, comment, speed = evaluate_accuracy(distance, temp, 1.2)
@@ -113,16 +141,13 @@ def measure_distance_route():
             "speed": speed
         })
 
-
 @app.route("/check_shape")
 def check_shape():
     with lock:
         beep()
         readings = []
         for _ in range(5):
-            d = measure_distance()
-            if d is None:
-                d = random.uniform(10, 100)
+            d = measure_distance() or random.uniform(10, 100)
             readings.append(d)
             time.sleep(0.1)
         mean_val = statistics.mean(readings)
@@ -140,16 +165,13 @@ def check_shape():
             "speed": speed
         })
 
-
 @app.route("/check_material")
 def check_material():
     with lock:
         beep()
         readings = []
         for _ in range(10):
-            d = measure_distance()
-            if d is None:
-                d = random.uniform(10, 100)
+            d = measure_distance() or random.uniform(10, 100)
             readings.append(d)
             time.sleep(0.1)
         mean_val = statistics.mean(readings)
@@ -167,33 +189,31 @@ def check_material():
             "speed": speed
         })
 
-
 @app.route("/summary")
 def summary():
-    conclusion = (
+    text = (
         "Ultrasonic accuracy depends on multiple factors:\n"
         "- Distance: Greater distance reduces echo reliability.\n"
         "- Shape: Irregular surfaces scatter sound.\n"
         "- Material: Absorbing materials weaken reflections.\n"
         "- Temperature: Affects sound speed.\n\n"
-        "✅ Conclusion: Use flat, reflective surfaces in stable temperature for best accuracy."
+        "✅ Use flat, reflective surfaces in stable temperature for best accuracy."
     )
-    return jsonify({"summary": conclusion})
-
+    return jsonify({"summary": text})
 
 @app.teardown_appcontext
 def cleanup_gpio(exception=None):
     try:
         lgpio.gpiochip_close(h)
+        print("🧹 GPIO cleaned up")
     except Exception:
         pass
-
 
 if __name__ == "__main__":
     try:
         app.run(host="0.0.0.0", port=5000, debug=True)
     except KeyboardInterrupt:
-        print("Exiting safely...")
+        print("\n👋 Exiting safely...")
     finally:
         try:
             lgpio.gpiochip_close(h)
