@@ -1,5 +1,5 @@
 from flask import Flask, render_template, jsonify
-import RPi.GPIO as GPIO
+import lgpio
 import time, statistics, random
 from threading import Lock
 import Adafruit_SSD1306
@@ -8,17 +8,18 @@ from PIL import Image, ImageDraw, ImageFont
 app = Flask(__name__)
 lock = Lock()
 
-# Ultrasonic sensor pins
+# GPIO pins
 TRIG = 23
 ECHO = 24
 BUZZER = 18
 
-# GPIO Setup
-GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(TRIG, GPIO.OUT)
-GPIO.setup(ECHO, GPIO.IN)
-GPIO.setup(BUZZER, GPIO.OUT)
+# Open GPIO chip
+h = lgpio.gpiochip_open(0)
+
+# Configure GPIO
+lgpio.gpio_claim_output(h, TRIG)
+lgpio.gpio_claim_input(h, ECHO)
+lgpio.gpio_claim_output(h, BUZZER)
 
 # OLED setup
 disp = Adafruit_SSD1306.SSD1306_128_64(rst=None)
@@ -31,25 +32,38 @@ image = Image.new("1", (width, height))
 draw = ImageDraw.Draw(image)
 font = ImageFont.load_default()
 
-# Helper functions
+
+# --- Helper functions ---
 def measure_distance():
-    GPIO.output(TRIG, True)
+    """Measure distance using ultrasonic sensor."""
+    lgpio.gpio_write(h, TRIG, 1)
     time.sleep(0.00001)
-    GPIO.output(TRIG, False)
-    start = time.time()
-    stop = time.time()
-    while GPIO.input(ECHO) == 0:
-        start = time.time()
-    while GPIO.input(ECHO) == 1:
-        stop = time.time()
-    elapsed = stop - start
-    distance = (elapsed * 34300) / 2
+    lgpio.gpio_write(h, TRIG, 0)
+
+    pulse_start = time.time()
+    pulse_end = time.time()
+
+    timeout = time.time() + 0.04  # safety timeout
+    while lgpio.gpio_read(h, ECHO) == 0:
+        pulse_start = time.time()
+        if time.time() > timeout:
+            return None
+
+    while lgpio.gpio_read(h, ECHO) == 1:
+        pulse_end = time.time()
+        if time.time() > timeout:
+            return None
+
+    pulse_duration = pulse_end - pulse_start
+    distance = pulse_duration * 17150  # cm
     return round(distance, 2)
 
+
 def beep():
-    GPIO.output(BUZZER, True)
+    lgpio.gpio_write(h, BUZZER, 1)
     time.sleep(0.2)
-    GPIO.output(BUZZER, False)
+    lgpio.gpio_write(h, BUZZER, 0)
+
 
 def oled_display(line1, line2=""):
     draw.rectangle((0, 0, width, height), outline=0, fill=0)
@@ -58,8 +72,11 @@ def oled_display(line1, line2=""):
     disp.image(image)
     disp.display()
 
+
 def evaluate_accuracy(distance, temp, std_dev):
-    """Returns badge type and recommendation."""
+    """Return badge type and recommendation."""
+    if distance is None:
+        return "Poor", "red", "No echo detected — object out of range.", 0
     speed_of_sound = 331 + (0.6 * temp)
     accuracy_score = max(0, 100 - abs(std_dev * 2 + (distance / 200) + abs(temp - 25)))
     if accuracy_score > 80:
@@ -67,20 +84,22 @@ def evaluate_accuracy(distance, temp, std_dev):
     elif accuracy_score > 50:
         badge, color, comment = "Moderate", "orange", "Accuracy slightly affected by environment."
     else:
-        badge, color, comment = "Poor", "red", "High error — try stabilizing object or temp."
+        badge, color, comment = "Poor", "red", "High error — try stabilizing object or temperature."
     return badge, color, comment, round(speed_of_sound, 2)
 
+
+# --- Flask Routes ---
 @app.route("/")
 def index():
     return render_template("dashboard.html")
+
 
 @app.route("/measure_distance")
 def measure_distance_route():
     with lock:
         beep()
-        try:
-            distance = measure_distance()
-        except:
+        distance = measure_distance()
+        if distance is None:
             distance = random.uniform(10, 100)
         temp = random.uniform(20, 35)
         oled_display(f"Dist: {distance} cm", f"Temp: {round(temp,1)}°C")
@@ -94,15 +113,15 @@ def measure_distance_route():
             "speed": speed
         })
 
+
 @app.route("/check_shape")
 def check_shape():
     with lock:
         beep()
         readings = []
-        for _ in range(15):
-            try:
-                d = measure_distance()
-            except:
+        for _ in range(5):
+            d = measure_distance()
+            if d is None:
                 d = random.uniform(10, 100)
             readings.append(d)
             time.sleep(0.1)
@@ -121,15 +140,15 @@ def check_shape():
             "speed": speed
         })
 
+
 @app.route("/check_material")
 def check_material():
     with lock:
         beep()
         readings = []
-        for _ in range(20):
-            try:
-                d = measure_distance()
-            except:
+        for _ in range(10):
+            d = measure_distance()
+            if d is None:
                 d = random.uniform(10, 100)
             readings.append(d)
             time.sleep(0.1)
@@ -148,26 +167,27 @@ def check_material():
             "speed": speed
         })
 
+
 @app.route("/summary")
 def summary():
-    """Generate a textual summary based on sensor trends."""
     conclusion = (
         "Ultrasonic accuracy depends on multiple factors:\n"
-        "- **Distance:** Greater distance reduces echo reliability.\n"
-        "- **Shape:** Irregular surfaces scatter sound, reducing precision.\n"
-        "- **Material:** Absorbing materials cause weak reflections.\n"
-        "- **Temperature:** Affects sound speed; higher temp increases accuracy slightly.\n\n"
-        "Final Insight: Maintain moderate temperature and reflective, flat surfaces "
-        "for the most reliable ultrasonic readings."
+        "- Distance: Greater distance reduces echo reliability.\n"
+        "- Shape: Irregular surfaces scatter sound.\n"
+        "- Material: Absorbing materials weaken reflections.\n"
+        "- Temperature: Affects sound speed.\n\n"
+        "✅ Conclusion: Use flat, reflective surfaces in stable temperature for best accuracy."
     )
     return jsonify({"summary": conclusion})
 
+
 @app.teardown_appcontext
 def cleanup_gpio(exception=None):
-    GPIO.cleanup()
+    lgpio.gpiochip_close(h)
+
 
 if __name__ == "__main__":
     try:
         app.run(host="0.0.0.0", port=5000, debug=True)
     finally:
-        GPIO.cleanup()
+        lgpio.gpiochip_close(h)
