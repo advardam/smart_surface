@@ -2,7 +2,8 @@ from flask import Flask, render_template, jsonify
 import lgpio
 import time, statistics, random
 from threading import Lock
-import Adafruit_SSD1306
+from luma.core.interface.serial import i2c
+from luma.oled.device import ssd1306
 from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
@@ -21,56 +22,55 @@ lgpio.gpio_claim_output(h, TRIG)
 lgpio.gpio_claim_input(h, ECHO)
 lgpio.gpio_claim_output(h, BUZZER)
 
-# OLED setup
-disp = Adafruit_SSD1306.SSD1306_128_64(rst=None)
-disp.begin()
-disp.clear()
-disp.display()
+# --- OLED setup using luma.oled ---
+serial = i2c(port=1, address=0x3C)
+disp = ssd1306(serial)
 width = disp.width
 height = disp.height
 image = Image.new("1", (width, height))
 draw = ImageDraw.Draw(image)
 font = ImageFont.load_default()
 
+def oled_display(line1, line2=""):
+    draw.rectangle((0, 0, width, height), outline=0, fill=0)
+    draw.text((0, 10), line1, font=font, fill=255)
+    draw.text((0, 30), line2, font=font, fill=255)
+    disp.display(image)
+
 
 # --- Helper functions ---
 def measure_distance():
-    """Measure distance using ultrasonic sensor."""
+    """Reliable ultrasonic distance measurement."""
+    lgpio.gpio_write(h, TRIG, 0)
+    time.sleep(0.002)
     lgpio.gpio_write(h, TRIG, 1)
     time.sleep(0.00001)
     lgpio.gpio_write(h, TRIG, 0)
 
-    pulse_start = time.time()
-    pulse_end = time.time()
-
-    timeout = time.time() + 0.04  # safety timeout
+    # Wait for echo start
+    start_time = time.time()
+    timeout = start_time + 0.04
     while lgpio.gpio_read(h, ECHO) == 0:
-        pulse_start = time.time()
+        start_time = time.time()
         if time.time() > timeout:
             return None
 
+    # Wait for echo end
+    end_time = time.time()
     while lgpio.gpio_read(h, ECHO) == 1:
-        pulse_end = time.time()
+        end_time = time.time()
         if time.time() > timeout:
             return None
 
-    pulse_duration = pulse_end - pulse_start
-    distance = pulse_duration * 17150  # cm
-    return round(distance, 2)
+    # Calculate distance in cm
+    distance = (end_time - start_time) * 17150
+    return round(distance, 2) if distance > 2 else None
 
 
 def beep():
     lgpio.gpio_write(h, BUZZER, 1)
     time.sleep(0.2)
     lgpio.gpio_write(h, BUZZER, 0)
-
-
-def oled_display(line1, line2=""):
-    draw.rectangle((0, 0, width, height), outline=0, fill=0)
-    draw.text((0, 10), line1, font=font, fill=255)
-    draw.text((0, 30), line2, font=font, fill=255)
-    disp.image(image)
-    disp.display()
 
 
 def evaluate_accuracy(distance, temp, std_dev):
@@ -183,11 +183,19 @@ def summary():
 
 @app.teardown_appcontext
 def cleanup_gpio(exception=None):
-    lgpio.gpiochip_close(h)
+    try:
+        lgpio.gpiochip_close(h)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
     try:
         app.run(host="0.0.0.0", port=5000, debug=True)
+    except KeyboardInterrupt:
+        print("Exiting safely...")
     finally:
-        lgpio.gpiochip_close(h)
+        try:
+            lgpio.gpiochip_close(h)
+        except Exception:
+            pass
