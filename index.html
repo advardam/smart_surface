@@ -1,165 +1,81 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smart Surface and Shape Detector</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body {
-      margin: 0;
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #e32636, #008000);
-      color: white;
-      text-align: center;
-      padding: 20px;
-    }
-    h1 {
-      font-size: 2.2em;
-      font-weight: bold;
-      margin-bottom: 20px;
-      text-shadow: 2px 2px 5px rgba(0,0,0,0.3);
-    }
-    .buttons {
-      margin: 20px auto;
-    }
-    button {
-      background-color: yellow;
-      color: black;
-      font-size: 1.2em;
-      border: none;
-      border-radius: 12px;
-      padding: 15px 30px;
-      margin: 10px;
-      cursor: pointer;
-      font-weight: bold;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-      transition: transform 0.2s ease, background-color 0.2s ease;
-    }
-    button:hover {
-      background-color: #fff34d;
-      transform: scale(1.05);
-    }
-    .data-box {
-      display: inline-block;
-      background: rgba(255,255,255,0.15);
-      border-radius: 10px;
-      padding: 15px;
-      margin: 10px;
-      width: 250px;
-      font-size: 1.1em;
-    }
-    .chart-container {
-      background: white;
-      color: black;
-      border-radius: 10px;
-      margin: 20px auto;
-      padding: 15px;
-      width: 80%;
-    }
-    canvas {
-      background: white;
-    }
-  </style>
+    <title>Smart Surface & Shape Detection Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: #0f172a;
+            color: #e2e8f0;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        h1 { color: #38bdf8; }
+        button {
+            margin: 10px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 10px;
+            background: #38bdf8;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover { background: #0284c7; }
+        .data-box {
+            background: #1e293b;
+            margin: 10px auto;
+            padding: 10px;
+            width: 60%;
+            border-radius: 12px;
+        }
+    </style>
 </head>
 <body>
-  <h1>Smart Surface and Shape Detector</h1>
+    <h1>🧠 Smart Surface & Shape Detection</h1>
 
-  <div class="buttons">
-    <button onclick="startMeasurement('distance')">Measure Distance</button>
-    <button onclick="startMeasurement('shape')">Measure Shape</button>
-    <button onclick="startMeasurement('material')">Measure Material</button>
-  </div>
+    <button onclick="fetchData('/measure/distance')">Measure Distance</button>
+    <button onclick="fetchData('/measure/shape')">Detect Shape</button>
+    <button onclick="fetchData('/measure/material')">Check Material</button>
 
-  <div id="data-panels">
-    <div class="data-box">Distance: <span id="distance">--</span> cm</div>
-    <div class="data-box">Color: <span id="color">--</span></div>
-    <div class="data-box">Object Temp: <span id="obj_temp">--</span> °C</div>
-    <div class="data-box">Ambient Temp: <span id="amb_temp">--</span> °C</div>
-    <div class="data-box">Speed of Sound: <span id="speed">--</span> m/s</div>
-    <div class="data-box">Temp Variation: <span id="temp_var">--</span> °C</div>
-  </div>
+    <div class="data-box">
+        <h3>Results</h3>
+        <p id="distance">Distance: --</p>
+        <p id="color">Color: --</p>
+        <p id="temp">Object Temp: --</p>
+        <p id="amb">Ambient Temp: --</p>
+        <p id="speed">Speed of Sound: --</p>
+        <p id="shape">Shape: --</p>
+        <p id="material">Material: --</p>
+    </div>
 
-  <div class="data-box" style="width: 80%; font-size: 1.2em;">
-    Status: <span id="status">Waiting for measurement...</span>
-  </div>
+    <canvas id="chart" width="400" height="200"></canvas>
 
-  <div class="chart-container">
-    <h3>Shape Readings</h3>
-    <canvas id="shapeChart"></canvas>
-  </div>
+    <script>
+        const ctx = document.getElementById('chart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: 'Sensor Readings', data: [] }] },
+            options: { scales: { y: { beginAtZero: true } } }
+        });
 
-  <div class="chart-container">
-    <h3>Material Readings</h3>
-    <canvas id="materialChart"></canvas>
-  </div>
+        async function fetchData(endpoint) {
+            const res = await fetch(endpoint);
+            const d = await res.json();
 
-  <script>
-    const shapeChart = new Chart(document.getElementById("shapeChart"), {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [{
-          label: 'Shape Readings (cm)',
-          data: [],
-          borderColor: 'black',
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          tension: 0.3
-        }]
-      },
-      options: {
-        scales: {
-          x: { title: { display: true, text: "Sample Number" }},
-          y: { title: { display: true, text: "Distance (cm)" }}
+            document.getElementById("distance").innerText = "Distance: " + d.distance + " cm";
+            document.getElementById("color").innerText = "Color: " + d.color;
+            document.getElementById("temp").innerText = "Object Temp: " + d.temp_obj + " °C";
+            document.getElementById("amb").innerText = "Ambient Temp: " + d.temp_amb + " °C";
+            document.getElementById("speed").innerText = "Speed of Sound: " + d.speed + " m/s";
+            document.getElementById("shape").innerText = "Shape: " + d.shape;
+            document.getElementById("material").innerText = "Material: " + d.material;
+
+            chart.data.labels = d.readings.map((_, i) => i + 1);
+            chart.data.datasets[0].data = d.readings;
+            chart.update();
         }
-      }
-    });
-
-    const materialChart = new Chart(document.getElementById("materialChart"), {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [{
-          label: 'Material Readings (cm)',
-          data: [],
-          borderColor: 'black',
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          tension: 0.3
-        }]
-      },
-      options: {
-        scales: {
-          x: { title: { display: true, text: "Sample Number" }},
-          y: { title: { display: true, text: "Distance (cm)" }}
-        }
-      }
-    });
-
-    async function startMeasurement(type) {
-      document.getElementById("status").innerText = `Measuring ${type}... Please wait.`;
-      const response = await fetch(`/measure/${type}`);
-      const data = await response.json();
-
-      document.getElementById("distance").innerText = data.distance || "--";
-      document.getElementById("color").innerText = data.color || "--";
-      document.getElementById("obj_temp").innerText = data.obj_temp || "--";
-      document.getElementById("amb_temp").innerText = data.amb_temp || "--";
-      document.getElementById("speed").innerText = data.speed || "--";
-      document.getElementById("temp_var").innerText = data.temp_variation || "--";
-      document.getElementById("status").innerText = data.status || "Completed";
-
-      if (type === "shape" && data.readings) {
-        shapeChart.data.labels = data.readings.map((_, i) => i + 1);
-        shapeChart.data.datasets[0].data = data.readings;
-        shapeChart.update();
-      } else if (type === "material" && data.readings) {
-        materialChart.data.labels = data.readings.map((_, i) => i + 1);
-        materialChart.data.datasets[0].data = data.readings;
-        materialChart.update();
-      }
-    }
-  </script>
+    </script>
 </body>
 </html>
