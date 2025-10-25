@@ -1,207 +1,164 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Smart Surface and Shape Detector</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smart Surface & Shape Detection Dashboard</title>
+
+  <!-- Bootstrap (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
   <style>
-    body {
-      font-family: "Segoe UI", sans-serif;
-      background: linear-gradient(to right, #006400, #8B0000);
-      color: white;
-      text-align: center;
-      margin: 0;
-      padding: 0;
-    }
-
-    h1 {
-      background: rgba(0, 0, 0, 0.6);
-      padding: 15px;
-      font-size: 28px;
-      color: yellow;
-      margin: 0;
-      text-shadow: 2px 2px 4px black;
-    }
-
-    .container {
-      margin-top: 30px;
-    }
-
-    .btn {
-      background-color: yellow;
-      color: black;
-      font-size: 20px;
-      font-weight: bold;
-      border: none;
-      border-radius: 12px;
-      padding: 18px 32px;
-      margin: 15px;
-      cursor: pointer;
-      box-shadow: 3px 3px 10px rgba(0,0,0,0.4);
-      transition: 0.3s;
-    }
-
-    .btn:hover {
-      background-color: gold;
-      transform: scale(1.05);
-    }
-
-    .results {
-      margin-top: 30px;
-      font-size: 18px;
-      color: #fff;
-    }
-
-    .badge {
-      margin-top: 15px;
-      font-size: 22px;
-      font-weight: bold;
-      padding: 10px 20px;
-      border-radius: 8px;
-      display: inline-block;
-    }
-
-    #chartContainer {
-      margin: 30px auto;
-      width: 80%;
-      max-width: 700px;
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-    }
-
-    #readingsChart {
-      background-color: white;
-    }
-
-    #summary {
-      margin-top: 30px;
-      background-color: rgba(0, 0, 0, 0.6);
-      padding: 20px;
-      border-radius: 10px;
-      width: 80%;
-      max-width: 700px;
-      margin-left: auto;
-      margin-right: auto;
-      font-size: 17px;
-      line-height: 1.6;
-      text-align: left;
-      color: #fff;
-    }
+    body { background:#0f172a; color:#e6eef8; }
+    .card { background: linear-gradient(180deg,#0b1220,#071128); border: 1px solid rgba(255,255,255,0.04); }
+    .btn-prim { background:#2563eb; border:none; }
+    .value { font-size:1.6rem; font-weight:600; }
+    .small-muted { color:#9aa7c7; font-size:0.9rem; }
+    canvas { background: rgba(255,255,255,0.02); border-radius:6px; }
   </style>
 </head>
 <body>
+  <div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3>Smart Surface & Shape Detection</h3>
+      <div class="small-muted">Raspberry Pi 5 — Press any test button to start</div>
+    </div>
 
-  <h1>Smart Surface and Shape Detector</h1>
+    <div class="row g-3">
+      <!-- Controls -->
+      <div class="col-lg-4">
+        <div class="card p-3">
+          <h5>Controls</h5>
+          <p class="small-muted">Click to perform each synchronous test. Project only runs when you press a button.</p>
+          <div class="d-grid gap-2">
+            <button id="btn-distance" class="btn btn-prim btn-lg">Measure Distance</button>
+            <button id="btn-shape" class="btn btn-outline-light btn-lg">Measure Shape (15 readings)</button>
+            <button id="btn-material" class="btn btn-outline-light btn-lg">Check Material (20 readings)</button>
+          </div>
+          <hr class="my-3">
+          <h6>Latest Readings</h6>
+          <div class="mb-2"><span class="small-muted">Distance:</span> <span id="txt-distance" class="value">—</span></div>
+          <div class="mb-2"><span class="small-muted">Color:</span> <span id="txt-color" class="value">—</span></div>
+          <div class="mb-2"><span class="small-muted">Object Temp / Ambient:</span> <span id="txt-temp" class="value">—</span></div>
+          <div class="mb-2"><span class="small-muted">Speed of sound (m/s):</span> <span id="txt-speed" class="value">—</span></div>
+          <div class="mb-2"><span class="small-muted">Accuracy:</span> <span id="txt-accuracy" class="value">—</span></div>
+        </div>
+      </div>
 
-  <div class="container">
-    <button class="btn" onclick="measureDistance()">Measure Distance</button>
-    <button class="btn" onclick="checkShape()">Check Shape</button>
-    <button class="btn" onclick="checkMaterial()">Check Material</button>
+      <!-- Charts + Output -->
+      <div class="col-lg-8">
+        <div class="card p-3 mb-3">
+          <h5 id="result-title">Results</h5>
+          <div id="result-text" class="small-muted">Press a button to run the test.</div>
+          <div class="row mt-3">
+            <div class="col-md-12">
+              <canvas id="readingsChart" height="140"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="card p-3">
+          <h6>Detailed Output</h6>
+          <pre id="json-output" style="background:transparent; color:#cbe6ff; border:none; padding:0;">{} </pre>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="results" id="results">
-    <p><strong>Distance:</strong> <span id="distance">--</span> cm</p>
-    <p><strong>Temperature:</strong> <span id="temp">--</span> °C</p>
-    <p><strong>Speed of Sound:</strong> <span id="speed">--</span> m/s</p>
-    <p><strong>Shape:</strong> <span id="shape">--</span></p>
-    <p><strong>Material:</strong> <span id="material">--</span></p>
-    <p><strong>Std Dev:</strong> <span id="std_dev">--</span></p>
-
-    <div id="badge" class="badge">--</div>
-    <p id="comment" style="font-size: 18px;"></p>
-  </div>
-
-  <div id="chartContainer">
-    <canvas id="readingsChart"></canvas>
-  </div>
-
-  <div id="summary">
-    <h3>Experiment Summary</h3>
-    <p id="summaryText">Press any button to start the experiment and view conclusions here.</p>
-  </div>
-
-  <script>
-    let chart;
-
-    function updateBadge(badge, color, comment) {
-      const badgeDiv = document.getElementById("badge");
-      badgeDiv.innerHTML = badge;
-      badgeDiv.style.backgroundColor = color;
-      document.getElementById("comment").innerHTML = comment;
+<script>
+const ctx = document.getElementById('readingsChart').getContext('2d');
+let chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'Distance (cm)',
+      data: [],
+      fill: false,
+      tension: 0.3,
+      pointRadius: 3,
+      borderWidth: 2
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false }
+    },
+    scales: {
+      y: { beginAtZero: true }
     }
+  }
+});
 
-    function updateChart(data) {
-      const ctx = document.getElementById('readingsChart').getContext('2d');
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: data.map((_, i) => i + 1),
-          datasets: [{
-            label: 'Distance Readings (cm)',
-            data: data,
-            borderColor: 'black',
-            backgroundColor: 'white',
-            borderWidth: 2,
-            pointRadius: 3,
-            fill: false
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { labels: { color: 'black' } } },
-          scales: {
-            x: { ticks: { color: 'black' } },
-            y: { ticks: { color: 'black' } }
-          }
-        }
-      });
-    }
+function updateChart(readings) {
+  chart.data.labels = readings.map((_,i) => i+1);
+  chart.data.datasets[0].data = readings;
+  chart.update();
+}
 
-    function updateSummary() {
-      fetch("/summary")
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById("summaryText").innerHTML = data.summary;
-        });
-    }
+function showResultSimple(title, json) {
+  document.getElementById('result-title').innerText = title;
+  document.getElementById('json-output').innerText = JSON.stringify(json, null, 2);
+}
 
-    function measureDistance() {
-      fetch("/measure_distance")
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById("distance").innerText = data.distance;
-          document.getElementById("temp").innerText = data.temp;
-          document.getElementById("speed").innerText = data.speed;
-          updateBadge(data.badge, data.badgeColor, data.comment);
-          updateSummary();
-        });
-    }
+function updateTopFields(json) {
+  // distance
+  if (json.distance !== undefined) {
+    document.getElementById('txt-distance').innerText = json.distance + ' cm';
+  } else if (json.mean !== undefined) {
+    document.getElementById('txt-distance').innerText = json.mean + ' cm';
+  }
+  // color
+  if (json.color) document.getElementById('txt-color').innerText = json.color;
+  // temps
+  if (json.object_temp !== undefined && json.ambient_temp !== undefined) {
+    document.getElementById('txt-temp').innerText = json.object_temp + '°C / ' + json.ambient_temp + '°C (Δ ' + (json.temp_diff||0) + '°C)';
+    document.getElementById('txt-speed').innerText = (json.speed_of_sound || (json.speed_of_sound===0?0:"—")) + ' m/s';
+  } else if (json.object_temp) {
+    document.getElementById('txt-temp').innerText = json.object_temp + '°C';
+  }
+  // accuracy
+  if (json.accuracy) {
+    document.getElementById('txt-accuracy').innerText = json.accuracy.badge + ' — ' + json.accuracy.comment;
+  } else if (json.accuracy_score) {
+    document.getElementById('txt-accuracy').innerText = json.accuracy_score;
+  }
+}
 
-    function checkShape() {
-      fetch("/check_shape")
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById("shape").innerText = data.shape;
-          document.getElementById("std_dev").innerText = data.std_dev;
-          updateChart(data.readings);
-          updateBadge(data.badge, data.badgeColor, data.comment);
-          updateSummary();
-        });
+/* Fetch wrappers */
+async function runEndpoint(url, title, readingsCount) {
+  document.getElementById('result-text').innerText = 'Running test — please wait...';
+  try {
+    const res = await fetch(url);
+    const j = await res.json();
+    showResultSimple(title, j);
+    updateTopFields(j);
+    if (j.readings) {
+      updateChart(j.readings);
+    } else if (j.reading) {
+      updateChart([j.reading]);
+    } else if (j.distance) {
+      updateChart([j.distance]);
+    } else {
+      updateChart([]);
     }
+    document.getElementById('result-text').innerText = 'Test complete.';
+  } catch (e) {
+    document.getElementById('result-text').innerText = 'Error running test: ' + e;
+    console.error(e);
+  }
+}
 
-    function checkMaterial() {
-      fetch("/check_material")
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById("material").innerText = data.material;
-          document.getElementById("std_dev").innerText = data.std_dev;
-          updateChart(data.readings);
-          updateBadge(data.badge, data.badgeColor, data.comment);
-          updateSummary();
-        });
-    }
-  </script>
-</body>
-</html>
+/* Button bindings */
+document.getElementById('btn-distance').addEventListener('click', () => {
+  runEndpoint('/measure_distance', 'Distance Measurement', 1);
+});
+document.getElementById('btn-shape').addEventListener('click', () => {
+  runEndpoint('/measure_shape', 'Shape Measurement (15 readings)', 15);
+});
+document.getElementById('btn-material').addEventListener('click', () => {
+  runEndpoint('/measure_material',_
